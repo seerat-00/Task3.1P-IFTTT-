@@ -1,0 +1,74 @@
+#include <Wire.h>
+#include <BH1750.h>
+#include <WiFiNINA.h>
+#include <ArduinoHttpClient.h>
+
+// BH1750 object
+BH1750 lightMeter;
+
+// Wi-Fi credentials
+const char* ssid = "OPPO K10 5G";
+const char* password = "chehak03";
+
+// IFTTT Webhooks keys and URLs
+const char* ifttt_trigger_sunlight_on = "https://maker.ifttt.com/trigger/detect_sunlight/with/key/nblWwndO5qVwDE09UKRkxjbZGShq2iCeL6Xsa6N-7if";
+
+WiFiClient wifiClient;
+HttpClient httpClient = HttpClient(wifiClient, "maker.ifttt.com", 80);
+
+// Threshold for sunlight detection (in lux)
+const int sunlightThreshold = 10000;  // You can adjust this based on your testing
+bool sunlightPresent = false;
+
+void setup() {
+  Serial.begin(9600);
+
+  // Initialize the BH1750 sensor
+  Wire.begin();
+  lightMeter.begin();
+  
+  // Set up the built-in LED for visual feedback
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  // Connect to Wi-Fi
+  connectToWiFi();
+
+  // Initial check of light intensity
+  float lux = lightMeter.readLightLevel();
+  sunlightPresent = (lux > sunlightThreshold);
+}
+
+void loop() {
+  float lux = lightMeter.readLightLevel();
+  Serial.print("Light Level: ");
+  Serial.print(lux);
+  Serial.println(" lux");
+
+  if (lux > sunlightThreshold && !sunlightPresent) {
+    // Sunlight detected
+    sunlightPresent = true;
+    digitalWrite(LED_BUILTIN, HIGH); // Turn on LED
+    sendIFTTTNotification(ifttt_trigger_sunlight_on);
+  }
+
+  // Add delay here to ensure the loop runs at regular intervals
+  delay(5000);  // Check every 5 seconds
+}
+
+void connectToWiFi() {
+  Serial.print("Connecting to Wi-Fi");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+  Serial.println("Connected!");
+}
+
+void sendIFTTTNotification(const char* url) {
+  httpClient.get(url);
+  int statusCode = httpClient.responseStatusCode();
+  Serial.print("IFTTT response: ");
+  Serial.println(statusCode);
+  httpClient.stop();
+}
